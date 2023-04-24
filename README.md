@@ -7,7 +7,7 @@ board[i(5,2)] = 'Q'
 print_board(board)
 ```
 
-Checks if F6 is attacked by any of white's pieces (spoiler alert; it is, by the queen we just placed):
+Checks if F6 is attacked by any of white's pieces (spoiler alert: it is, by the queen we just placed):
 ```ruby
 attacked?(board, i(5,5), 1)
 ```
@@ -18,7 +18,7 @@ moves, pieces = legal_moves(board, 1)
 ```
 
 Finds en passant for black pawn:
-```
+```ruby
 board[i(1,3)] = 'P'; board[i(2,3)] = 'p'
 legal_moves(board, -1, [i(1,1),i(1,3),'P'])
 ```
