@@ -460,7 +460,7 @@ def greedy_bot(board, turn, prev_move, castles)
 
     # Found a mating move
     if legal_moves(board, -turn, move, castles).first.empty? && attacked?(board, enemy_king_i, turn)
-      byebug
+      # byebug
       eval_moves << [999999, move]
       break
     else
