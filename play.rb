@@ -16,10 +16,17 @@ def xy(i)
 end
 
 # Convert letter number ('E2') to index
-def an_i(c)
-  letter, y = c.split('')
+def an_i(s)
+  letter, y = s.split('')
   x = 'ABCDEFGH'.index(letter.upcase)
   (y.to_i - 1) * 8 + x
+end
+
+# Convert index to letter number
+def i_an(i)
+  x, y = xy(i)
+  l = 'ABCDEFGH'.split('')[x]
+  "#{l}#{y+1}"
 end
 
 # Returns color of piece. White = 1, Black = -1, Empty = 0
@@ -28,12 +35,38 @@ def color(p)
   'RNBKQP'.include?(p) ? 1 : -1
 end
 
-# Parses FEN position.
+# Parses FEN position
 # Example `b, turn, castles = parse_fen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')`
 # TODO: parse en passant, halfmoves and fullmoves
 def parse_fen(s)
   board, turn, castling, passing, halfmoves, fullmoves = s.split(' ')
   return board.split('/').reverse.join.split('').map { |c| c =~ /\d/ ? ' ' * c.to_i : c }.join, turn == 'w' ? 1 : -1, castling
+end
+
+# Creates FEN string for position
+# TODO: implement passing, halfmoves and fullmoves
+def fen(board, turn, castles=nil)
+  s = ''
+  7.downto(0).each do |y|
+    spaces = 0
+    0.upto(7).each do |x|
+      u = board[i(x,y)]
+      if u == ' '
+        spaces += 1
+      else
+        if spaces > 0
+          s << spaces.to_s; spaces = 0
+        end
+        s << u
+      end
+    end
+    if spaces > 0
+      s << spaces.to_s; spaces = 0
+    end
+    s << '/' if y > 0
+  end
+  s << ' ' << (turn == 1 ? 'w' : 'b' )
+  s << ' ' << (castles && !castles.empty? ? castles : '-')
 end
 
 # Returns location of king
@@ -70,21 +103,21 @@ end
 # RNBQKBNR        ········
 
 def print_board(board)
-  8.times { puts }
+  4.times { puts }
   8.times do |y|
-    print('        ')
+    print(' ' * 8)
     8.times do |x|
       p = board[i(x, 7 - y)]
       print(p == ' ' ? '·' : p)
     end
     puts
   end
-  8.times { puts }
+  4.times { puts }
 end
 
 def print_move(move)
   from, to, unit, promo = move
-  s = "#{unit} #{xy(from)} => #{xy(to)} #{promo}"
+  s = "#{unit}#{i_an(from)}#{i_an(to)} #{promo}"
   
   if c = castle(move)
     s += c.upcase == 'K' ? '0-0' : '0-0-0'
@@ -366,8 +399,6 @@ def play(start_pos, p1, p2)
 
       moves, pieces = legal_moves(board, turn, prev_move, castles)
 
-      print_board(board)
-
       # Game finished
       # TODO: Not perfect, should be improved
       if moves.empty? || pieces.count == 2 || turns > 1000
@@ -382,6 +413,7 @@ def play(start_pos, p1, p2)
         end
         
         puts "P1 #{p1_wins}, P2 #{p2_wins}, Draws: #{draws}"
+        puts
 
         break
       end
@@ -410,6 +442,10 @@ def play(start_pos, p1, p2)
 
       turn = -turn
       turns += 1
+
+      print_board(board)
+      puts fen(board, turn, castles)
+      puts
     end
 
     games += 1
@@ -425,13 +461,15 @@ end
 # Implements human player that asks the move via keyboard
 def human_player(board, turn, prev_move, castles)
   print_board(board)
+  puts fen(board, turn, castles)
+  puts
   moves, pieces = legal_moves(board, turn, prev_move, castles)
 
   loop do
     puts "Type your move:"
-    an_move = gets
-    if an_move =~ /^[a-h][1-8],[a-h][1-8](,[nrqbNRQB])?$/
-      from, to, promo = an_move.strip.split(',')
+    s = gets.strip
+    if s =~ /^[a-h][1-8],[a-h][1-8](,[nrqbNRQB])?$/
+      from, to, promo = s.strip.split(',')
       from = an_i(from)
       to = an_i(to)
 
@@ -441,6 +479,8 @@ def human_player(board, turn, prev_move, castles)
       else
         puts "Illegal move"
       end
+    elsif s == 'm'
+      moves.each { |m| print_move(m) }
     else
       puts "Check input"
     end
@@ -460,7 +500,6 @@ def greedy_bot(board, turn, prev_move, castles)
 
     # Found a mating move
     if legal_moves(board, -turn, move, castles).first.empty? && attacked?(board, enemy_king_i, turn)
-      # byebug
       eval_moves << [999999, move]
       break
     else
@@ -468,7 +507,7 @@ def greedy_bot(board, turn, prev_move, castles)
       white_values = { 'Q' => 9, 'R' => 5, 'N' => 3, 'B' => 3, 'P' => 1, ' ' => 0, 'K' => 0 }
       black_values = { 'q' => 9, 'r' => 5, 'n' => 3, 'b' => 3, 'p' => 1, ' ' => 0, 'k' => 0 }
       white_score = 0; black_score = 0
-      total_dist = 0
+      total_dist = 0.0
       64.times do |i|
         u = board[i]
         white_score += (white_values[u] || 0)
@@ -483,9 +522,15 @@ def greedy_bot(board, turn, prev_move, castles)
       end
 
       score = (turn == 1) ? white_score - black_score : black_score - white_score
+      score /= 39.0
+
+      # TODO: Although helps to make less draws, minimizing distance also incentivices to put pieces right next to enemy king to be eaten (not good)
+      dist = -total_dist/1000.0
+
+      # puts "M #{score}, D #{dist}"
 
       # Normalize material score and distance score into one
-      eval_moves << [(score/39) + (1/(total_dist/(16*8))), move]
+      eval_moves << [score + dist, move]
     end
 
     undo_move(board, move, p)
@@ -505,3 +550,6 @@ board = 'RNBQKBNRPPPPPPPP' + (" " * 32) + 'pppppppprnbqkbnr'
 
 # Greedy bot vs Random (yes, it does win most of the time (yay!), even tho draws surprisingly often against random mover)
 play(board, :greedy_bot, :random_player)
+
+# Human vs Greedy
+# play(board, :human_player, :greedy_bot)
